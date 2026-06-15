@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp Sound Notify</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="header">
+    <div class="header-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"
+              fill="var(--green)" opacity=".15"/>
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"
+              fill="var(--green)"/>
+        <path d="M20.52 3.449C18.24 1.245 15.24 0 12.045 0 5.463 0 .104 5.334.101 11.893c0 2.096.549 4.14 1.595 5.945L0 24l6.335-1.652c1.746.943 3.71 1.444 5.71 1.444h.005c6.585 0 11.946-5.336 11.949-11.896 0-3.176-1.24-6.165-3.48-8.407zm-8.475 18.304h-.004c-1.774 0-3.513-.476-5.031-1.378l-.361-.214-3.741.975.999-3.648-.235-.374a9.861 9.861 0 01-1.512-5.26c.002-5.45 4.436-9.884 9.889-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884z"
+              fill="var(--green)" opacity=".6"/>
+      </svg>
+    </div>
+    <div class="header-text">
+      <h1>Sound Notify</h1>
+      <span class="header-sub">WhatsApp Web</span>
+    </div>
+
+    <!-- Toggle principal -->
+    <label class="toggle" title="Ativar / Desativar extensão">
+      <input type="checkbox" id="toggleEnabled" />
+      <span class="toggle-track">
+        <span class="toggle-thumb"></span>
+      </span>
+    </label>
+  </header>
+
+  <!-- ── Status badge ── -->
+  <div class="status-bar" id="statusBar">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Carregando…</span>
+  </div>
+
+  <!-- ── Corpo ── -->
+  <main class="body">
+
+    <!-- Seção: Arquivo de áudio -->
+    <section class="card">
+      <div class="card-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/>
+          <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        Som de notificação
+      </div>
+
+      <div class="audio-preview" id="audioPreview">
+        <span id="audioName">Nenhum arquivo selecionado</span>
+        <button class="btn-icon" id="btnClearAudio" title="Remover áudio" hidden>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="btn-row">
+        <!-- Input real de arquivo, escondido -->
+        <input type="file" id="fileInput" accept="audio/*" hidden />
+        <button class="btn btn-secondary" id="btnChooseFile">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Escolher arquivo
+        </button>
+        <button class="btn btn-accent" id="btnTest" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
+          </svg>
+          Testar
+        </button>
+      </div>
+    </section>
+
+    <!-- Seção: Volume -->
+    <section class="card">
+      <div class="card-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Volume
+        <span class="volume-value" id="volumeDisplay">80%</span>
+      </div>
+      <div class="slider-wrap">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="slider-icon">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <input type="range" id="volumeSlider" min="0" max="100" value="80" />
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="slider-icon">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" fill="currentColor"/>
+          <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </section>
+
+    <!-- Seção: Instruções rápidas -->
+    <section class="card card-info">
+      <p>A extensão detecta <strong>novas mensagens recebidas</strong> no WhatsApp Web e toca o som escolhido no lugar do som padrão.</p>
+      <p>Formatos suportados: <strong>MP3, WAV, OGG, M4A, FLAC</strong>.</p>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer class="footer">
+    <span>WhatsApp Sound Notify v1.0</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
