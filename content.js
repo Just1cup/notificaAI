@@ -22,7 +22,15 @@
   const PLAY_DEBOUNCE_MS = 800;
   const WATCHDOG_INTERVAL_MS = 30 * 1000;
   const CHAT_LIST_SELECTOR = '#pane-side';
-  const UNREAD_BADGE_SELECTOR = 'span[aria-label*="unread"], span[aria-label*="não lida"], span[aria-label*="não lidas"], span[aria-label*="nao lida"], span[aria-label*="nao lidas"]';
+  const UNREAD_BADGE_SELECTOR = [
+    '[aria-label*="unread"]',
+    '[aria-label*="não lida"]',
+    '[aria-label*="não lidas"]',
+    '[aria-label*="nao lida"]',
+    '[aria-label*="nao lidas"]',
+    'span',
+    'div',
+  ].join(',');
 
   const processedIds = new Set();
 
@@ -396,15 +404,89 @@
     if (!chatList) return 0;
 
     let total = 0;
-    for (const badge of chatList.querySelectorAll(UNREAD_BADGE_SELECTOR)) {
+    const badges = findUnreadBadges(chatList);
+    for (const badge of badges) {
       total += getUnreadCountFromText(badge.getAttribute('aria-label') || badge.textContent || '');
     }
 
     return total;
   }
 
+  function findUnreadBadges(chatList) {
+    const badges = [];
+    for (const candidate of chatList.querySelectorAll(UNREAD_BADGE_SELECTOR)) {
+      if (!isUnreadBadge(candidate)) continue;
+      addUnreadBadge(badges, candidate);
+    }
+
+    return badges;
+  }
+
+  function addUnreadBadge(badges, candidate) {
+    for (let index = badges.length - 1; index >= 0; index -= 1) {
+      const existing = badges[index];
+      if (existing.contains(candidate)) {
+        badges.splice(index, 1);
+        continue;
+      }
+
+      if (candidate.contains(existing)) {
+        return;
+      }
+    }
+
+    badges.push(candidate);
+  }
+
+  function isUnreadBadge(element) {
+    const ariaLabel = (element.getAttribute('aria-label') || '').toLowerCase();
+    if (isUnreadText(ariaLabel)) return true;
+
+    const text = normalizeBadgeText(element.textContent || '');
+    if (!/^\d{1,4}$/.test(text)) return false;
+    if (!isSmallVisibleElement(element)) return false;
+
+    return hasGreenBadgeStyle(element);
+  }
+
+  function isUnreadText(text) {
+    return /unread|não lida|não lidas|nao lida|nao lidas|mensagem não lida|mensagens não lidas|mensagem nao lida|mensagens nao lidas/i.test(text);
+  }
+
+  function normalizeBadgeText(text) {
+    return String(text).trim().replace(/\D/g, '');
+  }
+
+  function isSmallVisibleElement(element) {
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    return rect.width <= 44 && rect.height <= 44;
+  }
+
+  function hasGreenBadgeStyle(element) {
+    let current = element;
+    for (let depth = 0; current && depth < 4; depth += 1, current = current.parentElement) {
+      const style = getComputedStyle(current);
+      if (isGreenishColor(style.backgroundColor)) return true;
+    }
+
+    return false;
+  }
+
+  function isGreenishColor(color) {
+    const match = String(color).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([.\d]+))?\)/i);
+    if (!match) return false;
+
+    const red = Number(match[1]);
+    const green = Number(match[2]);
+    const blue = Number(match[3]);
+    const alpha = match[4] === undefined ? 1 : Number(match[4]);
+
+    return alpha > 0.25 && green >= 120 && green > red * 1.2 && green > blue * 1.2;
+  }
+
   function getUnreadCountFromText(text) {
-    const match = String(text).match(/\d+/);
+    const match = String(text).replace(/\./g, '').match(/\d+/);
     if (!match) return 1;
 
     const count = Number(match[0]);

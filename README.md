@@ -30,6 +30,8 @@ Extensao Chrome/Brave Manifest V3 para tocar um som personalizado quando uma nov
 7. Use `Testar` para confirmar o volume.
 8. Ajuste a duracao. O padrao e 10 segundos.
 
+Sempre que atualizar a extensao em `chrome://extensions`, recarregue a aba do WhatsApp Web. O Chrome so injeta `content.js` em paginas carregadas depois da atualizacao.
+
 ## Debug
 
 1. Abra o popup da extensao.
@@ -44,6 +46,8 @@ Os logs registram eventos tecnicos da extensao, como selecao de arquivo, salvame
 A extensao nao recarrega o WhatsApp Web a cada 30 segundos. Em vez disso, ela usa um watchdog interno a cada 30 segundos para revalidar os observers do DOM, o contador do titulo e os badges de mensagens nao lidas da lista lateral.
 
 Essa abordagem e melhor que `location.reload()` porque nao interrompe digitacao, chamadas, login, carregamento de midia nem o estado visual da conversa aberta.
+
+O detector tambem reconhece badges verdes numericos na lista lateral, como os indicadores `2` ou `3` exibidos em conversas nao lidas.
 
 ## Observacoes
 
