@@ -32,6 +32,7 @@
   let titleObserver = null;
   let watchdogTimer = null;
   let currentRoot = null;
+  let currentChatList = null;
   let syncUntil = 0;
   let lastUnreadCount = 0;
   let lastChatListUnreadTotal = 0;
@@ -47,8 +48,6 @@
     config = await loadConfig();
     lastUnreadCount = getUnreadCountFromTitle();
     waLog('content', 'content initialized', {
-      url: location.href,
-      title: document.title,
       unreadCount: lastUnreadCount,
       enabled: config.enabled,
       hasAudio: config.hasAudio,
@@ -120,7 +119,6 @@
 
     watchdogTimer = setInterval(() => {
       waLog('content', 'watchdog tick', {
-        title: document.title,
         unreadCount: getUnreadCountFromTitle(),
         chatListUnreadTotal: getChatListUnreadTotal(),
         hasChatObserver: Boolean(chatObserver),
@@ -150,18 +148,24 @@
     titleObserver.observe(titleElement, {
       childList: true,
     });
-    waLog('content', 'watching title unread count', { title: document.title });
+    waLog('content', 'watching title unread count');
   }
 
   function watchChatListUnreadBadges() {
-    if (chatListObserver) return;
-
     const chatList = document.querySelector(CHAT_LIST_SELECTOR);
     if (!chatList) {
       waLog('content', 'chat list not found yet');
       return;
     }
 
+    if (chatListObserver && chatList === currentChatList && document.contains(chatList)) return;
+
+    if (chatListObserver) {
+      chatListObserver.disconnect();
+      waLog('content', 'chat list observer reattached');
+    }
+
+    currentChatList = chatList;
     lastChatListUnreadTotal = getChatListUnreadTotal();
 
     chatListObserver = new MutationObserver(() => {
@@ -292,11 +296,11 @@
     processedIds.add(id);
     trimProcessedIds();
     if (options.silent) {
-      waLog('content', 'incoming message ignored during history sync', { id: id.slice(0, 24) });
+      waLog('content', 'incoming message ignored during history sync');
       return;
     }
 
-    waLog('content', 'incoming message detected', { id: id.slice(0, 24) });
+    waLog('content', 'incoming message detected');
     playConfiguredAudio();
   }
 

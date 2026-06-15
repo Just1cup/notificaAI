@@ -168,7 +168,7 @@ function bindEvents() {
     }
 
     waLog('popup', 'file selected', {
-      name: file.name,
+      fileExt: getFileExtension(file.name),
       size: file.size,
       type: file.type || '(empty)',
     });
@@ -176,7 +176,7 @@ function bindEvents() {
     // Valida que é um arquivo de áudio. Alguns navegadores deixam file.type vazio.
     if (!isAudioFile(file)) {
       waLog('popup', 'file rejected: invalid audio type', {
-        name: file.name,
+        fileExt: getFileExtension(file.name),
         type: file.type || '(empty)',
       });
       showToast('Selecione um arquivo de áudio válido.', 'error');
@@ -186,7 +186,7 @@ function bindEvents() {
 
     if (file.size > MAX_AUDIO_BYTES) {
       waLog('popup', 'file rejected: too large', {
-        name: file.name,
+        fileExt: getFileExtension(file.name),
         size: file.size,
         limit: MAX_AUDIO_BYTES,
       });
@@ -205,7 +205,7 @@ function bindEvents() {
       renderUI();
       await refreshLogCount();
       waLog('popup', 'audio saved', {
-        name: file.name,
+        fileExt: getFileExtension(file.name),
         size: file.size,
         type: file.type || inferAudioType(file.name),
       });
@@ -339,7 +339,7 @@ function openAudioDb() {
 
 async function saveAudioFile(file) {
   waLog('popup', 'indexeddb save start', {
-    name: file.name,
+    fileExt: getFileExtension(file.name),
     size: file.size,
     type: file.type || inferAudioType(file.name),
   });
@@ -358,7 +358,7 @@ async function saveAudioFile(file) {
 
     transaction.oncomplete = () => {
       db.close();
-      waLog('popup', 'indexeddb save complete', { name: file.name, size: file.size });
+      waLog('popup', 'indexeddb save complete', { fileExt: getFileExtension(file.name), size: file.size });
       resolve();
     };
     transaction.onerror = () => {
@@ -401,6 +401,11 @@ function inferAudioType(fileName) {
   };
 
   return types[ext] || 'audio/mpeg';
+}
+
+function getFileExtension(fileName) {
+  const ext = String(fileName).toLowerCase().split('.').pop();
+  return ext && ext !== fileName.toLowerCase() ? ext : '(none)';
 }
 
 function playAudio(volume = 1, durationSeconds = 10) {
@@ -464,7 +469,7 @@ async function exportLogs() {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast('Logs exportados.');
 }
 

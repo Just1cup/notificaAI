@@ -14,21 +14,29 @@ const DB_VERSION = 1;
 const AUDIO_STORE = 'audio';
 const AUDIO_KEY = 'notification-sound';
 
-chrome.runtime.onMessage.addListener(message => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || message.target !== 'offscreen') return;
 
   waLog('offscreen', 'message received', { type: message.type });
 
   if (message.type === 'PLAY_STORED_SOUND') {
-    playStoredAudio(message.payload).catch(error => {
-      waLog('offscreen', 'stored audio play failed', { error: error.message });
-      console.warn('[WA-Notify] Falha ao carregar audio salvo:', error.message);
-    });
+    playStoredAudio(message.payload)
+      .then(result => sendResponse({ ok: true, ...result }))
+      .catch(error => {
+        waLog('offscreen', 'stored audio play failed', { error: error.message });
+        console.warn('[WA-Notify] Falha ao carregar audio salvo:', error.message);
+        sendResponse({ ok: false, error: error.message });
+      });
+    return true;
   }
 
   if (message.type === 'STOP_SOUND') {
     stopAudio();
+    sendResponse({ ok: true });
+    return false;
   }
+
+  return false;
 });
 
 async function playStoredAudio(payload = {}) {
@@ -41,12 +49,10 @@ async function playStoredAudio(payload = {}) {
   const audioRecord = await getAudioRecord();
   if (!audioRecord || !audioRecord.blob) {
     waLog('offscreen', 'no audio record found');
-    console.warn('[WA-Notify] Nenhum audio salvo para reproducao.');
-    return;
+    throw new Error('Nenhum audio salvo para reproducao.');
   }
 
   waLog('offscreen', 'audio record loaded', {
-    name: audioRecord.name,
     type: audioRecord.type,
     size: audioRecord.blob.size,
     updatedAt: audioRecord.updatedAt,
@@ -61,12 +67,20 @@ async function playStoredAudio(payload = {}) {
   stopTimer = setTimeout(stopAudio, durationMs);
 
   currentAudio.addEventListener('ended', clearStopTimer, { once: true });
-  currentAudio.play().catch(error => {
-    clearStopTimer();
+  try {
+    await currentAudio.play();
+  } catch (error) {
     waLog('offscreen', 'audio element play rejected', { error: error.message });
-    console.warn('[WA-Notify] Falha ao reproduzir audio:', error.message);
-  });
+    stopAudio();
+    throw error;
+  }
+
   waLog('offscreen', 'audio play called');
+  return {
+    durationSeconds: normalizeDuration(payload.durationSeconds),
+    size: audioRecord.blob.size,
+    type: audioRecord.type,
+  };
 }
 
 function stopAudio() {

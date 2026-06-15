@@ -13,6 +13,12 @@ const OFFSCREEN_DOCUMENT = 'offscreen.html';
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || !message.type) return false;
 
+  if (message.type === 'LOG_EVENT') {
+    waAppendLogEntry(message.payload);
+    sendResponse({ ok: true });
+    return false;
+  }
+
   waLog('background', 'message received', { type: message.type });
 
   if (message.type === 'PLAY_STORED_SOUND') {
@@ -47,7 +53,7 @@ async function playStoredSound(payload = {}) {
   });
   await ensureOffscreenDocument();
 
-  chrome.runtime.sendMessage({
+  const response = await sendOffscreenMessage({
     target: 'offscreen',
     type: 'PLAY_STORED_SOUND',
     payload: {
@@ -55,7 +61,11 @@ async function playStoredSound(payload = {}) {
       durationSeconds: normalizeDuration(payload.durationSeconds),
     },
   });
-  waLog('background', 'play forwarded to offscreen');
+
+  waLog('background', 'play offscreen response', { ok: response.ok });
+  if (!response.ok) {
+    throw new Error(response.error || 'Offscreen playback failed');
+  }
 }
 
 async function stopSound() {
@@ -64,11 +74,28 @@ async function stopSound() {
     return;
   }
 
-  chrome.runtime.sendMessage({
+  const response = await sendOffscreenMessage({
     target: 'offscreen',
     type: 'STOP_SOUND',
   });
-  waLog('background', 'stop forwarded to offscreen');
+
+  waLog('background', 'stop offscreen response', { ok: response.ok });
+  if (!response.ok) {
+    throw new Error(response.error || 'Offscreen stop failed');
+  }
+}
+
+function sendOffscreenMessage(message) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+
+      resolve(response || { ok: false, error: 'Empty offscreen response' });
+    });
+  });
 }
 
 async function ensureOffscreenDocument() {

@@ -37,7 +37,7 @@ Extensao Chrome/Brave Manifest V3 para tocar um som personalizado quando uma nov
 3. Clique em `Exportar logs`.
 4. Salve o JSON baixado em `logs/`.
 
-Os logs registram eventos tecnicos da extensao, como selecao de arquivo, salvamento local, deteccao de mensagem e tentativa de reproducao. O conteudo das mensagens do WhatsApp nao e lido nem gravado.
+Os logs registram eventos tecnicos da extensao, como selecao de arquivo, salvamento local, deteccao de mensagem e tentativa de reproducao. O conteudo das mensagens do WhatsApp nao e lido nem gravado. Dados sensiveis como URL, titulo da aba, IDs e nomes de arquivo sao omitidos dos logs exportados.
 
 ## Monitoramento
 
