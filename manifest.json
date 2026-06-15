@@ -5,7 +5,8 @@
   "description": "Som personalizado para notificações de novas mensagens no WhatsApp Web.",
 
   "permissions": [
-    "storage"
+    "storage",
+    "offscreen"
   ],
 
   "host_permissions": [
@@ -19,6 +20,10 @@
       "run_at": "document_idle"
     }
   ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
 
   "action": {
     "default_popup": "popup.html"

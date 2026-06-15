@@ -80,6 +80,14 @@
           Testar
         </button>
       </div>
+
+      <button class="btn btn-secondary btn-full" id="btnPause" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+          <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+        </svg>
+        Pausar áudio
+      </button>
     </section>
 
     <!-- Seção: Volume -->
@@ -109,9 +117,25 @@
       </div>
     </section>
 
+    <!-- Seção: Duração -->
+    <section class="card">
+      <div class="card-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+          <path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Duração
+        <span class="volume-value" id="durationDisplay">10s</span>
+      </div>
+      <div class="duration-row">
+        <input type="number" id="durationInput" min="1" max="120" value="10" />
+        <span>segundos</span>
+      </div>
+    </section>
+
     <!-- Seção: Instruções rápidas -->
     <section class="card card-info">
-      <p>A extensão detecta <strong>novas mensagens recebidas</strong> no WhatsApp Web e toca o som escolhido no lugar do som padrão.</p>
+      <p>A extensão detecta <strong>novas mensagens recebidas</strong> no WhatsApp Web e toca o som escolhido por até <strong id="durationInfo">10 segundos</strong>.</p>
       <p>Formatos suportados: <strong>MP3, WAV, OGG, M4A, FLAC</strong>.</p>
     </section>
 

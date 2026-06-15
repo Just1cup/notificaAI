@@ -19,29 +19,36 @@
   const PROCESSED_TRIM_COUNT = 80;
   const CHAT_SYNC_MS = 1500;
   const HISTORY_BURST_THRESHOLD = 3;
+  const PLAY_DEBOUNCE_MS = 800;
 
   const processedIds = new Set();
 
   let chatObserver = null;
   let rootObserver = null;
+  let titleObserver = null;
   let currentRoot = null;
   let syncUntil = 0;
+  let lastUnreadCount = 0;
+  let lastPlayAt = 0;
   let config = {
     enabled: true,
     volume: 0.8,
     audioDataUrl: null,
+    durationSeconds: 10,
   };
 
   async function init() {
     config = await loadConfig();
+    lastUnreadCount = getUnreadCountFromTitle();
     bindStorageChanges();
     watchForChatRoot();
+    watchTitleUnreadCount();
     observeCurrentChat();
   }
 
   function loadConfig() {
     return new Promise(resolve => {
-      chrome.storage.local.get(['enabled', 'volume', 'audioDataUrl'], data => {
+      chrome.storage.local.get(['enabled', 'volume', 'audioDataUrl', 'durationSeconds'], data => {
         if (chrome.runtime.lastError) {
           console.warn('[WA-Notify] Falha ao carregar configuracoes:', chrome.runtime.lastError.message);
           resolve(config);
@@ -52,6 +59,7 @@
           enabled: data.enabled ?? true,
           volume: data.volume ?? 0.8,
           audioDataUrl: data.audioDataUrl ?? null,
+          durationSeconds: data.durationSeconds ?? 10,
         });
       });
     });
@@ -64,6 +72,7 @@
       if (changes.enabled) config.enabled = changes.enabled.newValue;
       if (changes.volume) config.volume = changes.volume.newValue;
       if (changes.audioDataUrl) config.audioDataUrl = changes.audioDataUrl.newValue;
+      if (changes.durationSeconds) config.durationSeconds = changes.durationSeconds.newValue;
     });
   }
 
@@ -77,6 +86,27 @@
     rootObserver.observe(document.body, {
       childList: true,
       subtree: true,
+    });
+  }
+
+  function watchTitleUnreadCount() {
+    if (titleObserver) return;
+
+    const titleElement = document.querySelector('title');
+    if (!titleElement) return;
+
+    titleObserver = new MutationObserver(() => {
+      const unreadCount = getUnreadCountFromTitle();
+
+      if (unreadCount > lastUnreadCount) {
+        playConfiguredAudio();
+      }
+
+      lastUnreadCount = unreadCount;
+    });
+
+    titleObserver.observe(titleElement, {
+      childList: true,
     });
   }
 
@@ -199,24 +229,47 @@
   function playConfiguredAudio() {
     if (!config.enabled || !config.audioDataUrl) return;
 
-    try {
-      const audio = new Audio(config.audioDataUrl);
-      audio.volume = normalizeVolume(config.volume);
+    const now = Date.now();
+    if (now - lastPlayAt < PLAY_DEBOUNCE_MS) return;
+    lastPlayAt = now;
 
-      audio.play().catch(err => {
-        if (err.name !== 'NotAllowedError') {
-          console.warn('[WA-Notify] Falha ao reproduzir audio:', err.message);
-        }
-      });
-    } catch (err) {
-      console.error('[WA-Notify] Erro ao preparar audio:', err);
-    }
+    chrome.runtime.sendMessage({
+      type: 'PLAY_SOUND',
+      payload: {
+        audioDataUrl: config.audioDataUrl,
+        volume: normalizeVolume(config.volume),
+        durationSeconds: normalizeDuration(config.durationSeconds),
+      },
+    }, response => {
+      if (chrome.runtime.lastError) {
+        console.warn('[WA-Notify] Background indisponivel:', chrome.runtime.lastError.message);
+        return;
+      }
+
+      if (response && response.ok === false) {
+        console.warn('[WA-Notify] Audio nao foi reproduzido:', response.error);
+      }
+    });
   }
 
   function normalizeVolume(volume) {
     const numericVolume = Number(volume);
     if (!Number.isFinite(numericVolume)) return 0.8;
     return Math.max(0, Math.min(1, numericVolume));
+  }
+
+  function normalizeDuration(durationSeconds) {
+    const numericDuration = Number(durationSeconds);
+    if (!Number.isFinite(numericDuration)) return 10;
+    return Math.max(1, Math.min(120, numericDuration));
+  }
+
+  function getUnreadCountFromTitle() {
+    const match = document.title.match(/\((\d+)\)/);
+    if (!match) return 0;
+
+    const count = Number(match[1]);
+    return Number.isFinite(count) ? count : 0;
   }
 
   if (document.readyState === 'loading') {

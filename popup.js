@@ -13,6 +13,7 @@ const $ = id => document.getElementById(id);
 let state = {
   enabled: true,
   volume: 0.8,
+  durationSeconds: 10,
   audioDataUrl: null,  // base64 do arquivo de áudio
   audioName: null,     // nome do arquivo para exibição
 };
@@ -31,7 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadState() {
   return new Promise(resolve => {
     chrome.storage.local.get(
-      ['enabled', 'volume', 'audioDataUrl', 'audioName'],
+      ['enabled', 'volume', 'durationSeconds', 'audioDataUrl', 'audioName'],
       data => {
         if (chrome.runtime.lastError) {
           console.warn('[WA-Notify] Falha ao carregar configuracoes:', chrome.runtime.lastError.message);
@@ -41,6 +42,7 @@ async function loadState() {
 
         state.enabled      = data.enabled      ?? true;
         state.volume       = data.volume       ?? 0.8;
+        state.durationSeconds = normalizeDuration(data.durationSeconds ?? 10);
         state.audioDataUrl = data.audioDataUrl ?? null;
         state.audioName    = data.audioName    ?? null;
         resolve();
@@ -55,6 +57,7 @@ async function saveState() {
     chrome.storage.local.set({
       enabled:      state.enabled,
       volume:       state.volume,
+      durationSeconds: state.durationSeconds,
       audioDataUrl: state.audioDataUrl,
       audioName:    state.audioName,
     }, () => {
@@ -77,15 +80,21 @@ function renderUI() {
   $('volumeSlider').value    = Math.round(state.volume * 100);
   $('volumeDisplay').textContent = Math.round(state.volume * 100) + '%';
 
+  $('durationInput').value = state.durationSeconds;
+  $('durationDisplay').textContent = state.durationSeconds + 's';
+  $('durationInfo').textContent = state.durationSeconds + ' segundos';
+
   // Áudio
   if (state.audioDataUrl) {
     $('audioName').textContent = state.audioName ?? 'Arquivo de áudio';
     $('btnClearAudio').hidden  = false;
     $('btnTest').disabled      = false;
+    $('btnPause').disabled     = false;
   } else {
     $('audioName').textContent = 'Nenhum arquivo selecionado';
     $('btnClearAudio').hidden  = true;
     $('btnTest').disabled      = true;
+    $('btnPause').disabled     = true;
   }
 
   // Status bar
@@ -187,7 +196,12 @@ function bindEvents() {
   // Botão testar som
   $('btnTest').addEventListener('click', () => {
     if (!state.audioDataUrl) return;
-    playAudio(state.audioDataUrl, state.volume);
+    playAudio(state.audioDataUrl, state.volume, state.durationSeconds);
+  });
+
+  // Botão pausar som em execução
+  $('btnPause').addEventListener('click', () => {
+    stopAudio();
   });
 
   // Slider de volume
@@ -204,6 +218,25 @@ function bindEvents() {
     } catch (err) {
       showToast('Nao foi possivel salvar o volume.', 'error');
       console.error('[WA-Notify] Erro ao salvar volume:', err);
+    }
+  });
+
+  $('durationInput').addEventListener('input', e => {
+    state.durationSeconds = normalizeDuration(e.target.value);
+    $('durationDisplay').textContent = state.durationSeconds + 's';
+    $('durationInfo').textContent = state.durationSeconds + ' segundos';
+  });
+
+  $('durationInput').addEventListener('change', async e => {
+    state.durationSeconds = normalizeDuration(e.target.value);
+    e.target.value = state.durationSeconds;
+    renderDuration();
+
+    try {
+      await saveState();
+    } catch (err) {
+      showToast('Nao foi possivel salvar a duracao.', 'error');
+      console.error('[WA-Notify] Erro ao salvar duracao:', err);
     }
   });
 }
@@ -223,16 +256,59 @@ function readFileAsDataURL(file) {
 }
 
 // ── Toca áudio a partir de um data URL ──────────────────────
-function playAudio(dataUrl, volume = 1) {
-  try {
-    const audio = new Audio(dataUrl);
-    audio.volume = Math.max(0, Math.min(1, volume));
-    audio.play().catch(err => {
-      console.warn('[WA-Notify] Falha ao tocar áudio:', err);
-    });
-  } catch (err) {
-    console.error('[WA-Notify] Erro ao criar Audio:', err);
-  }
+function playAudio(dataUrl, volume = 1, durationSeconds = 10) {
+  chrome.runtime.sendMessage({
+    type: 'PLAY_SOUND',
+    payload: {
+      audioDataUrl: dataUrl,
+      volume: normalizeVolume(volume),
+      durationSeconds: normalizeDuration(durationSeconds),
+    },
+  }, response => {
+    if (chrome.runtime.lastError) {
+      showToast('Nao foi possivel tocar o audio.', 'error');
+      console.warn('[WA-Notify] Background indisponivel:', chrome.runtime.lastError.message);
+      return;
+    }
+
+    if (response && response.ok === false) {
+      showToast('Nao foi possivel tocar o audio.', 'error');
+      console.warn('[WA-Notify] Audio nao foi reproduzido:', response.error);
+    }
+  });
+}
+
+function stopAudio() {
+  chrome.runtime.sendMessage({ type: 'STOP_SOUND' }, response => {
+    if (chrome.runtime.lastError) {
+      showToast('Nao foi possivel pausar o audio.', 'error');
+      console.warn('[WA-Notify] Background indisponivel:', chrome.runtime.lastError.message);
+      return;
+    }
+
+    if (response && response.ok === false) {
+      showToast('Nao foi possivel pausar o audio.', 'error');
+      console.warn('[WA-Notify] Audio nao foi pausado:', response.error);
+    }
+  });
+}
+
+function renderDuration() {
+  $('durationInput').value = state.durationSeconds;
+  $('durationDisplay').textContent = state.durationSeconds + 's';
+  $('durationInfo').textContent = state.durationSeconds + ' segundos';
+}
+
+function normalizeVolume(volume) {
+  const numericVolume = Number(volume);
+  if (!Number.isFinite(numericVolume)) return 0.8;
+  return Math.max(0, Math.min(1, numericVolume));
+}
+
+function normalizeDuration(durationSeconds) {
+  const numericDuration = Number(durationSeconds);
+  if (!Number.isFinite(numericDuration)) return 10;
+  return Math.max(1, Math.min(120, Math.round(numericDuration)));
 }
 
 // ── Toast de feedback ────────────────────────────────────────
