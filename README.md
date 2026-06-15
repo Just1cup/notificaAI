@@ -15,6 +15,7 @@ Extensao Chrome/Brave Manifest V3 para tocar um som personalizado quando uma nov
 - Permite escolher por quantos segundos o som toca.
 - Usa `MutationObserver` no content script para detectar mensagens recebidas.
 - Usa um offscreen document do Manifest V3 para reproduzir audio fora da pagina do WhatsApp.
+- Guarda logs locais para depuracao e permite exportar um JSON pelo popup.
 - Nao le, coleta, envia ou armazena o conteudo das mensagens.
 
 ## Instalar no Chrome ou Brave
@@ -27,6 +28,15 @@ Extensao Chrome/Brave Manifest V3 para tocar um som personalizado quando uma nov
 6. Clique no icone da extensao e escolha um arquivo de audio.
 7. Use `Testar` para confirmar o volume.
 8. Ajuste a duracao. O padrao e 10 segundos.
+
+## Debug
+
+1. Abra o popup da extensao.
+2. Reproduza o problema: escolha audio, teste o som ou aguarde uma mensagem.
+3. Clique em `Exportar logs`.
+4. Salve o JSON baixado em `logs/`.
+
+Os logs registram eventos tecnicos da extensao, como selecao de arquivo, salvamento local, deteccao de mensagem e tentativa de reproducao. O conteudo das mensagens do WhatsApp nao e lido nem gravado.
 
 ## Observacoes
 

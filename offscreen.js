@@ -17,8 +17,11 @@ const AUDIO_KEY = 'notification-sound';
 chrome.runtime.onMessage.addListener(message => {
   if (!message || message.target !== 'offscreen') return;
 
+  waLog('offscreen', 'message received', { type: message.type });
+
   if (message.type === 'PLAY_STORED_SOUND') {
     playStoredAudio(message.payload).catch(error => {
+      waLog('offscreen', 'stored audio play failed', { error: error.message });
       console.warn('[WA-Notify] Falha ao carregar audio salvo:', error.message);
     });
   }
@@ -29,13 +32,25 @@ chrome.runtime.onMessage.addListener(message => {
 });
 
 async function playStoredAudio(payload = {}) {
+  waLog('offscreen', 'play stored audio start', {
+    volume: payload.volume,
+    durationSeconds: payload.durationSeconds,
+  });
   stopAudio();
 
   const audioRecord = await getAudioRecord();
   if (!audioRecord || !audioRecord.blob) {
+    waLog('offscreen', 'no audio record found');
     console.warn('[WA-Notify] Nenhum audio salvo para reproducao.');
     return;
   }
+
+  waLog('offscreen', 'audio record loaded', {
+    name: audioRecord.name,
+    type: audioRecord.type,
+    size: audioRecord.blob.size,
+    updatedAt: audioRecord.updatedAt,
+  });
 
   currentObjectUrl = URL.createObjectURL(audioRecord.blob);
   currentAudio = new Audio(currentObjectUrl);
@@ -48,14 +63,19 @@ async function playStoredAudio(payload = {}) {
   currentAudio.addEventListener('ended', clearStopTimer, { once: true });
   currentAudio.play().catch(error => {
     clearStopTimer();
+    waLog('offscreen', 'audio element play rejected', { error: error.message });
     console.warn('[WA-Notify] Falha ao reproduzir audio:', error.message);
   });
+  waLog('offscreen', 'audio play called');
 }
 
 function stopAudio() {
   clearStopTimer();
 
-  if (!currentAudio) return;
+  if (!currentAudio) {
+    waLog('offscreen', 'stop ignored: no current audio');
+    return;
+  }
 
   currentAudio.pause();
   currentAudio.currentTime = 0;
@@ -66,6 +86,7 @@ function stopAudio() {
     URL.revokeObjectURL(currentObjectUrl);
     currentObjectUrl = null;
   }
+  waLog('offscreen', 'audio stopped');
 }
 
 function clearStopTimer() {
@@ -87,6 +108,7 @@ function normalizeDuration(durationSeconds) {
 }
 
 function openAudioDb() {
+  waLog('offscreen', 'opening indexeddb');
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -97,8 +119,14 @@ function openAudioDb() {
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('Falha ao abrir IndexedDB'));
+    request.onsuccess = () => {
+      waLog('offscreen', 'indexeddb opened');
+      resolve(request.result);
+    };
+    request.onerror = () => {
+      waLog('offscreen', 'indexeddb open failed', { error: request.error?.message || 'unknown' });
+      reject(request.error || new Error('Falha ao abrir IndexedDB'));
+    };
   });
 }
 
@@ -108,8 +136,14 @@ async function getAudioRecord() {
     const transaction = db.transaction(AUDIO_STORE, 'readonly');
     const request = transaction.objectStore(AUDIO_STORE).get(AUDIO_KEY);
 
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error || new Error('Falha ao ler audio'));
+    request.onsuccess = () => {
+      waLog('offscreen', 'indexeddb audio read complete', { found: Boolean(request.result) });
+      resolve(request.result || null);
+    };
+    request.onerror = () => {
+      waLog('offscreen', 'indexeddb audio read failed', { error: request.error?.message || 'unknown' });
+      reject(request.error || new Error('Falha ao ler audio'));
+    };
     transaction.oncomplete = () => db.close();
     transaction.onerror = () => {
       db.close();

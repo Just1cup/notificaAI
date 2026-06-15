@@ -40,6 +40,15 @@
   async function init() {
     config = await loadConfig();
     lastUnreadCount = getUnreadCountFromTitle();
+    waLog('content', 'content initialized', {
+      url: location.href,
+      title: document.title,
+      unreadCount: lastUnreadCount,
+      enabled: config.enabled,
+      hasAudio: config.hasAudio,
+      volume: config.volume,
+      durationSeconds: config.durationSeconds,
+    });
     bindStorageChanges();
     watchForChatRoot();
     watchTitleUnreadCount();
@@ -50,6 +59,7 @@
     return new Promise(resolve => {
       chrome.storage.local.get(['enabled', 'volume', 'hasAudio', 'durationSeconds'], data => {
         if (chrome.runtime.lastError) {
+          waLog('content', 'failed to load config', { error: chrome.runtime.lastError.message });
           console.warn('[WA-Notify] Falha ao carregar configuracoes:', chrome.runtime.lastError.message);
           resolve(config);
           return;
@@ -73,6 +83,13 @@
       if (changes.volume) config.volume = changes.volume.newValue;
       if (changes.hasAudio) config.hasAudio = changes.hasAudio.newValue;
       if (changes.durationSeconds) config.durationSeconds = changes.durationSeconds.newValue;
+      waLog('content', 'storage changed', {
+        keys: Object.keys(changes),
+        enabled: config.enabled,
+        hasAudio: config.hasAudio,
+        volume: config.volume,
+        durationSeconds: config.durationSeconds,
+      });
     });
   }
 
@@ -87,6 +104,7 @@
       childList: true,
       subtree: true,
     });
+    waLog('content', 'watching chat root');
   }
 
   function watchTitleUnreadCount() {
@@ -99,6 +117,11 @@
       const unreadCount = getUnreadCountFromTitle();
 
       if (unreadCount > lastUnreadCount) {
+        waLog('content', 'unread title count increased', {
+          previous: lastUnreadCount,
+          current: unreadCount,
+          title: document.title,
+        });
         playConfiguredAudio();
       }
 
@@ -108,6 +131,7 @@
     titleObserver.observe(titleElement, {
       childList: true,
     });
+    waLog('content', 'watching title unread count', { title: document.title });
   }
 
   function observeCurrentChat() {
@@ -115,6 +139,7 @@
     if (!root || root === currentRoot) return;
 
     currentRoot = root;
+    waLog('content', 'chat root observed', { existingMessages: root.querySelectorAll(MESSAGE_SELECTOR).length });
 
     if (chatObserver) {
       chatObserver.disconnect();
@@ -198,8 +223,12 @@
 
     processedIds.add(id);
     trimProcessedIds();
-    if (options.silent) return;
+    if (options.silent) {
+      waLog('content', 'incoming message ignored during history sync', { id: id.slice(0, 24) });
+      return;
+    }
 
+    waLog('content', 'incoming message detected', { id: id.slice(0, 24) });
     playConfiguredAudio();
   }
 
@@ -227,11 +256,25 @@
   }
 
   function playConfiguredAudio() {
-    if (!config.enabled || !config.hasAudio) return;
+    if (!config.enabled || !config.hasAudio) {
+      waLog('content', 'play skipped by config', {
+        enabled: config.enabled,
+        hasAudio: config.hasAudio,
+      });
+      return;
+    }
 
     const now = Date.now();
-    if (now - lastPlayAt < PLAY_DEBOUNCE_MS) return;
+    if (now - lastPlayAt < PLAY_DEBOUNCE_MS) {
+      waLog('content', 'play skipped by debounce', { elapsedMs: now - lastPlayAt });
+      return;
+    }
     lastPlayAt = now;
+
+    waLog('content', 'sending play request', {
+      volume: config.volume,
+      durationSeconds: config.durationSeconds,
+    });
 
     chrome.runtime.sendMessage({
       type: 'PLAY_STORED_SOUND',
@@ -241,13 +284,18 @@
       },
     }, response => {
       if (chrome.runtime.lastError) {
+        waLog('content', 'play request failed', { error: chrome.runtime.lastError.message });
         console.warn('[WA-Notify] Background indisponivel:', chrome.runtime.lastError.message);
         return;
       }
 
       if (response && response.ok === false) {
+        waLog('content', 'play response failed', { error: response.error });
         console.warn('[WA-Notify] Audio nao foi reproduzido:', response.error);
+        return;
       }
+
+      waLog('content', 'play response ok');
     });
   }
 

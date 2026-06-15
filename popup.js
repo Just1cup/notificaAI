@@ -30,6 +30,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadState();
   renderUI();
   bindEvents();
+  await refreshLogCount();
+  waLog('popup', 'popup loaded', {
+    enabled: state.enabled,
+    hasAudio: state.hasAudio,
+    audioName: state.audioName,
+    volume: state.volume,
+    durationSeconds: state.durationSeconds,
+  });
 });
 
 // ── Carrega configurações salvas ────────────────────────────
@@ -39,6 +47,7 @@ async function loadState() {
       ['enabled', 'volume', 'durationSeconds', 'hasAudio', 'audioName'],
       data => {
         if (chrome.runtime.lastError) {
+          waLog('popup', 'failed to load state', { error: chrome.runtime.lastError.message });
           console.warn('[WA-Notify] Falha ao carregar configuracoes:', chrome.runtime.lastError.message);
           resolve();
           return;
@@ -134,6 +143,7 @@ function bindEvents() {
     state.enabled = e.target.checked;
     try {
       await saveState();
+      waLog('popup', 'enabled changed', { enabled: state.enabled });
       updateStatusBar();
     } catch (err) {
       state.enabled = !state.enabled;
@@ -145,22 +155,41 @@ function bindEvents() {
 
   // Botão "Escolher arquivo" abre o input oculto
   $('btnChooseFile').addEventListener('click', () => {
+    waLog('popup', 'choose file clicked');
     $('fileInput').click();
   });
 
   // Seleção de arquivo
   $('fileInput').addEventListener('change', async e => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+      waLog('popup', 'file selection cancelled');
+      return;
+    }
+
+    waLog('popup', 'file selected', {
+      name: file.name,
+      size: file.size,
+      type: file.type || '(empty)',
+    });
 
     // Valida que é um arquivo de áudio. Alguns navegadores deixam file.type vazio.
     if (!isAudioFile(file)) {
+      waLog('popup', 'file rejected: invalid audio type', {
+        name: file.name,
+        type: file.type || '(empty)',
+      });
       showToast('Selecione um arquivo de áudio válido.', 'error');
       e.target.value = '';
       return;
     }
 
     if (file.size > MAX_AUDIO_BYTES) {
+      waLog('popup', 'file rejected: too large', {
+        name: file.name,
+        size: file.size,
+        limit: MAX_AUDIO_BYTES,
+      });
       showToast('Use um audio de ate 50 MB.', 'error');
       e.target.value = '';
       return;
@@ -174,8 +203,15 @@ function bindEvents() {
 
       await saveState();
       renderUI();
+      await refreshLogCount();
+      waLog('popup', 'audio saved', {
+        name: file.name,
+        size: file.size,
+        type: file.type || inferAudioType(file.name),
+      });
       showToast('Áudio salvo com sucesso!');
     } catch (err) {
+      waLog('popup', 'audio save failed', { error: err.message });
       console.error('[WA-Notify] Erro ao salvar arquivo:', err);
       showToast('Erro ao salvar o arquivo.', 'error');
     }
@@ -192,7 +228,10 @@ function bindEvents() {
       await deleteAudioFile();
       await saveState();
       renderUI();
+      waLog('popup', 'audio removed');
+      await refreshLogCount();
     } catch (err) {
+      waLog('popup', 'audio remove failed', { error: err.message });
       showToast('Nao foi possivel remover o audio.', 'error');
       console.error('[WA-Notify] Erro ao remover audio:', err);
     }
@@ -201,11 +240,16 @@ function bindEvents() {
   // Botão testar som
   $('btnTest').addEventListener('click', () => {
     if (!state.hasAudio) return;
+    waLog('popup', 'test audio clicked', {
+      volume: state.volume,
+      durationSeconds: state.durationSeconds,
+    });
     playAudio(state.volume, state.durationSeconds);
   });
 
   // Botão pausar som em execução
   $('btnPause').addEventListener('click', () => {
+    waLog('popup', 'pause audio clicked');
     stopAudio();
   });
 
@@ -220,7 +264,9 @@ function bindEvents() {
   $('volumeSlider').addEventListener('change', async () => {
     try {
       await saveState();
+      waLog('popup', 'volume saved', { volume: state.volume });
     } catch (err) {
+      waLog('popup', 'volume save failed', { error: err.message });
       showToast('Nao foi possivel salvar o volume.', 'error');
       console.error('[WA-Notify] Erro ao salvar volume:', err);
     }
@@ -239,9 +285,34 @@ function bindEvents() {
 
     try {
       await saveState();
+      waLog('popup', 'duration saved', { durationSeconds: state.durationSeconds });
     } catch (err) {
+      waLog('popup', 'duration save failed', { error: err.message });
       showToast('Nao foi possivel salvar a duracao.', 'error');
       console.error('[WA-Notify] Erro ao salvar duracao:', err);
+    }
+  });
+
+  $('btnExportLogs').addEventListener('click', async () => {
+    try {
+      waLog('popup', 'export logs clicked');
+      await exportLogs();
+      await refreshLogCount();
+    } catch (err) {
+      waLog('popup', 'export logs failed', { error: err.message });
+      showToast('Nao foi possivel exportar logs.', 'error');
+    }
+  });
+
+  $('btnClearLogs').addEventListener('click', async () => {
+    try {
+      await waClearLogs();
+      waLog('popup', 'logs cleared');
+      await refreshLogCount();
+      showToast('Logs limpos.');
+    } catch (err) {
+      waLog('popup', 'clear logs failed', { error: err.message });
+      showToast('Nao foi possivel limpar logs.', 'error');
     }
   });
 }
@@ -267,6 +338,12 @@ function openAudioDb() {
 }
 
 async function saveAudioFile(file) {
+  waLog('popup', 'indexeddb save start', {
+    name: file.name,
+    size: file.size,
+    type: file.type || inferAudioType(file.name),
+  });
+
   const db = await openAudioDb();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(AUDIO_STORE, 'readwrite');
@@ -281,10 +358,12 @@ async function saveAudioFile(file) {
 
     transaction.oncomplete = () => {
       db.close();
+      waLog('popup', 'indexeddb save complete', { name: file.name, size: file.size });
       resolve();
     };
     transaction.onerror = () => {
       db.close();
+      waLog('popup', 'indexeddb save error', { error: transaction.error?.message || 'unknown' });
       reject(transaction.error || new Error('Falha ao salvar audio'));
     };
   });
@@ -333,31 +412,66 @@ function playAudio(volume = 1, durationSeconds = 10) {
     },
   }, response => {
     if (chrome.runtime.lastError) {
+      waLog('popup', 'play message failed', { error: chrome.runtime.lastError.message });
       showToast('Nao foi possivel tocar o audio.', 'error');
       console.warn('[WA-Notify] Background indisponivel:', chrome.runtime.lastError.message);
       return;
     }
 
     if (response && response.ok === false) {
+      waLog('popup', 'play response failed', { error: response.error });
       showToast('Nao foi possivel tocar o audio.', 'error');
       console.warn('[WA-Notify] Audio nao foi reproduzido:', response.error);
+      return;
     }
+
+    waLog('popup', 'play response ok');
   });
 }
 
 function stopAudio() {
   chrome.runtime.sendMessage({ type: 'STOP_SOUND' }, response => {
     if (chrome.runtime.lastError) {
+      waLog('popup', 'stop message failed', { error: chrome.runtime.lastError.message });
       showToast('Nao foi possivel pausar o audio.', 'error');
       console.warn('[WA-Notify] Background indisponivel:', chrome.runtime.lastError.message);
       return;
     }
 
     if (response && response.ok === false) {
+      waLog('popup', 'stop response failed', { error: response.error });
       showToast('Nao foi possivel pausar o audio.', 'error');
       console.warn('[WA-Notify] Audio nao foi pausado:', response.error);
+      return;
     }
+
+    waLog('popup', 'stop response ok');
   });
+}
+
+async function exportLogs() {
+  const logs = await waExportLogs();
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    extension: 'WhatsApp Sound Notify',
+    logs,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `whatsapp-sound-notify-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  showToast('Logs exportados.');
+}
+
+async function refreshLogCount() {
+  const logs = await waExportLogs();
+  const countEl = $('logCount');
+  if (countEl) countEl.textContent = String(logs.length);
 }
 
 function renderDuration() {
