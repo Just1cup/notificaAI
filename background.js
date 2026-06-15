@@ -11,8 +11,8 @@ const OFFSCREEN_DOCUMENT = 'offscreen.html';
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || !message.type) return false;
 
-  if (message.type === 'PLAY_SOUND') {
-    playSound(message.payload)
+  if (message.type === 'PLAY_STORED_SOUND') {
+    playStoredSound(message.payload)
       .then(() => sendResponse({ ok: true }))
       .catch(error => {
         console.error('[WA-Notify] Falha ao tocar audio:', error);
@@ -34,17 +34,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-async function playSound(payload = {}) {
-  const audioDataUrl = payload.audioDataUrl;
-  if (!audioDataUrl) return;
-
+async function playStoredSound(payload = {}) {
   await ensureOffscreenDocument();
 
   chrome.runtime.sendMessage({
     target: 'offscreen',
-    type: 'PLAY_SOUND',
+    type: 'PLAY_STORED_SOUND',
     payload: {
-      audioDataUrl,
       volume: normalizeVolume(payload.volume),
       durationSeconds: normalizeDuration(payload.durationSeconds),
     },

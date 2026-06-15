@@ -14,11 +14,15 @@ let state = {
   enabled: true,
   volume: 0.8,
   durationSeconds: 10,
-  audioDataUrl: null,  // base64 do arquivo de áudio
+  hasAudio: false,
   audioName: null,     // nome do arquivo para exibição
 };
 
-const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
+const DB_NAME = 'whatsapp-sound-notify';
+const DB_VERSION = 1;
+const AUDIO_STORE = 'audio';
+const AUDIO_KEY = 'notification-sound';
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
 const AUDIO_EXTENSIONS = /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)$/i;
 
 // ── Inicialização ───────────────────────────────────────────
@@ -32,7 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadState() {
   return new Promise(resolve => {
     chrome.storage.local.get(
-      ['enabled', 'volume', 'durationSeconds', 'audioDataUrl', 'audioName'],
+      ['enabled', 'volume', 'durationSeconds', 'hasAudio', 'audioName'],
       data => {
         if (chrome.runtime.lastError) {
           console.warn('[WA-Notify] Falha ao carregar configuracoes:', chrome.runtime.lastError.message);
@@ -43,7 +47,7 @@ async function loadState() {
         state.enabled      = data.enabled      ?? true;
         state.volume       = data.volume       ?? 0.8;
         state.durationSeconds = normalizeDuration(data.durationSeconds ?? 10);
-        state.audioDataUrl = data.audioDataUrl ?? null;
+        state.hasAudio     = data.hasAudio     ?? false;
         state.audioName    = data.audioName    ?? null;
         resolve();
       }
@@ -58,7 +62,7 @@ async function saveState() {
       enabled:      state.enabled,
       volume:       state.volume,
       durationSeconds: state.durationSeconds,
-      audioDataUrl: state.audioDataUrl,
+      hasAudio:     state.hasAudio,
       audioName:    state.audioName,
     }, () => {
       if (chrome.runtime.lastError) {
@@ -85,7 +89,7 @@ function renderUI() {
   $('durationInfo').textContent = state.durationSeconds + ' segundos';
 
   // Áudio
-  if (state.audioDataUrl) {
+  if (state.hasAudio) {
     $('audioName').textContent = state.audioName ?? 'Arquivo de áudio';
     $('btnClearAudio').hidden  = false;
     $('btnTest').disabled      = false;
@@ -112,7 +116,7 @@ function updateStatusBar() {
     return;
   }
 
-  if (!state.audioDataUrl) {
+  if (!state.hasAudio) {
     dot.className  = 'status-dot error';
     text.textContent = 'Aguardando arquivo de áudio';
     return;
@@ -157,15 +161,15 @@ function bindEvents() {
     }
 
     if (file.size > MAX_AUDIO_BYTES) {
-      showToast('Use um audio de ate 4 MB.', 'error');
+      showToast('Use um audio de ate 50 MB.', 'error');
       e.target.value = '';
       return;
     }
 
     try {
-      const dataUrl = await readFileAsDataURL(file);
+      await saveAudioFile(file);
 
-      state.audioDataUrl = dataUrl;
+      state.hasAudio = true;
       state.audioName    = file.name;
 
       await saveState();
@@ -182,9 +186,10 @@ function bindEvents() {
 
   // Botão remover áudio
   $('btnClearAudio').addEventListener('click', async () => {
-    state.audioDataUrl = null;
+    state.hasAudio = false;
     state.audioName    = null;
     try {
+      await deleteAudioFile();
       await saveState();
       renderUI();
     } catch (err) {
@@ -195,8 +200,8 @@ function bindEvents() {
 
   // Botão testar som
   $('btnTest').addEventListener('click', () => {
-    if (!state.audioDataUrl) return;
-    playAudio(state.audioDataUrl, state.volume, state.durationSeconds);
+    if (!state.hasAudio) return;
+    playAudio(state.volume, state.durationSeconds);
   });
 
   // Botão pausar som em execução
@@ -245,22 +250,84 @@ function isAudioFile(file) {
   return file.type.startsWith('audio/') || AUDIO_EXTENSIONS.test(file.name);
 }
 
-// ── Lê um File como data URL (base64) ───────────────────────
-function readFileAsDataURL(file) {
+function openAudioDb() {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = e => resolve(e.target.result);
-    reader.onerror = () => reject(new Error('Falha na leitura do arquivo'));
-    reader.readAsDataURL(file);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(AUDIO_STORE)) {
+        db.createObjectStore(AUDIO_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Falha ao abrir IndexedDB'));
   });
 }
 
-// ── Toca áudio a partir de um data URL ──────────────────────
-function playAudio(dataUrl, volume = 1, durationSeconds = 10) {
+async function saveAudioFile(file) {
+  const db = await openAudioDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(AUDIO_STORE, 'readwrite');
+    const store = transaction.objectStore(AUDIO_STORE);
+
+    store.put({
+      blob: file,
+      name: file.name,
+      type: file.type || inferAudioType(file.name),
+      updatedAt: Date.now(),
+    }, AUDIO_KEY);
+
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error('Falha ao salvar audio'));
+    };
+  });
+}
+
+async function deleteAudioFile() {
+  const db = await openAudioDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(AUDIO_STORE, 'readwrite');
+    transaction.objectStore(AUDIO_STORE).delete(AUDIO_KEY);
+
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error('Falha ao remover audio'));
+    };
+  });
+}
+
+function inferAudioType(fileName) {
+  const ext = fileName.toLowerCase().split('.').pop();
+  const types = {
+    aac: 'audio/aac',
+    flac: 'audio/flac',
+    m4a: 'audio/mp4',
+    mp3: 'audio/mpeg',
+    oga: 'audio/ogg',
+    ogg: 'audio/ogg',
+    opus: 'audio/ogg',
+    wav: 'audio/wav',
+    webm: 'audio/webm',
+  };
+
+  return types[ext] || 'audio/mpeg';
+}
+
+function playAudio(volume = 1, durationSeconds = 10) {
   chrome.runtime.sendMessage({
-    type: 'PLAY_SOUND',
+    type: 'PLAY_STORED_SOUND',
     payload: {
-      audioDataUrl: dataUrl,
       volume: normalizeVolume(volume),
       durationSeconds: normalizeDuration(durationSeconds),
     },

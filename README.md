@@ -6,7 +6,8 @@ Extensao Chrome/Brave Manifest V3 para tocar um som personalizado quando uma nov
 
 - Funciona somente em `https://web.whatsapp.com/*`.
 - Permite escolher um arquivo de audio local.
-- Salva o audio e as preferencias em `chrome.storage.local`.
+- Salva as preferencias em `chrome.storage.local`.
+- Salva o arquivo de audio localmente no IndexedDB da propria extensao.
 - Permite ativar/desativar a extensao.
 - Permite testar o som pelo popup.
 - Permite pausar o audio em execucao.
@@ -29,7 +30,7 @@ Extensao Chrome/Brave Manifest V3 para tocar um som personalizado quando uma nov
 
 ## Observacoes
 
-- Use arquivos de audio de ate 4 MB.
+- Use arquivos de audio de ate 50 MB.
 - A duracao pode ficar entre 1 e 120 segundos.
 - Se o WhatsApp Web mudar sua estrutura interna, o detector pode precisar de ajuste.
 - O primeiro carregamento de uma conversa e tratado como historico para evitar sons indevidos.

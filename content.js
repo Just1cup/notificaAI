@@ -33,7 +33,7 @@
   let config = {
     enabled: true,
     volume: 0.8,
-    audioDataUrl: null,
+    hasAudio: false,
     durationSeconds: 10,
   };
 
@@ -48,7 +48,7 @@
 
   function loadConfig() {
     return new Promise(resolve => {
-      chrome.storage.local.get(['enabled', 'volume', 'audioDataUrl', 'durationSeconds'], data => {
+      chrome.storage.local.get(['enabled', 'volume', 'hasAudio', 'durationSeconds'], data => {
         if (chrome.runtime.lastError) {
           console.warn('[WA-Notify] Falha ao carregar configuracoes:', chrome.runtime.lastError.message);
           resolve(config);
@@ -58,7 +58,7 @@
         resolve({
           enabled: data.enabled ?? true,
           volume: data.volume ?? 0.8,
-          audioDataUrl: data.audioDataUrl ?? null,
+          hasAudio: data.hasAudio ?? false,
           durationSeconds: data.durationSeconds ?? 10,
         });
       });
@@ -71,7 +71,7 @@
 
       if (changes.enabled) config.enabled = changes.enabled.newValue;
       if (changes.volume) config.volume = changes.volume.newValue;
-      if (changes.audioDataUrl) config.audioDataUrl = changes.audioDataUrl.newValue;
+      if (changes.hasAudio) config.hasAudio = changes.hasAudio.newValue;
       if (changes.durationSeconds) config.durationSeconds = changes.durationSeconds.newValue;
     });
   }
@@ -227,16 +227,15 @@
   }
 
   function playConfiguredAudio() {
-    if (!config.enabled || !config.audioDataUrl) return;
+    if (!config.enabled || !config.hasAudio) return;
 
     const now = Date.now();
     if (now - lastPlayAt < PLAY_DEBOUNCE_MS) return;
     lastPlayAt = now;
 
     chrome.runtime.sendMessage({
-      type: 'PLAY_SOUND',
+      type: 'PLAY_STORED_SOUND',
       payload: {
-        audioDataUrl: config.audioDataUrl,
         volume: normalizeVolume(config.volume),
         durationSeconds: normalizeDuration(config.durationSeconds),
       },
