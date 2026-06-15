@@ -20,15 +20,21 @@
   const CHAT_SYNC_MS = 1500;
   const HISTORY_BURST_THRESHOLD = 3;
   const PLAY_DEBOUNCE_MS = 800;
+  const WATCHDOG_INTERVAL_MS = 30 * 1000;
+  const CHAT_LIST_SELECTOR = '#pane-side';
+  const UNREAD_BADGE_SELECTOR = 'span[aria-label*="unread"], span[aria-label*="não lida"], span[aria-label*="não lidas"], span[aria-label*="nao lida"], span[aria-label*="nao lidas"]';
 
   const processedIds = new Set();
 
   let chatObserver = null;
+  let chatListObserver = null;
   let rootObserver = null;
   let titleObserver = null;
+  let watchdogTimer = null;
   let currentRoot = null;
   let syncUntil = 0;
   let lastUnreadCount = 0;
+  let lastChatListUnreadTotal = 0;
   let lastPlayAt = 0;
   let config = {
     enabled: true,
@@ -52,7 +58,9 @@
     bindStorageChanges();
     watchForChatRoot();
     watchTitleUnreadCount();
+    watchChatListUnreadBadges();
     observeCurrentChat();
+    startWatchdog();
   }
 
   function loadConfig() {
@@ -107,6 +115,28 @@
     waLog('content', 'watching chat root');
   }
 
+  function startWatchdog() {
+    if (watchdogTimer) return;
+
+    watchdogTimer = setInterval(() => {
+      waLog('content', 'watchdog tick', {
+        title: document.title,
+        unreadCount: getUnreadCountFromTitle(),
+        chatListUnreadTotal: getChatListUnreadTotal(),
+        hasChatObserver: Boolean(chatObserver),
+        hasChatListObserver: Boolean(chatListObserver),
+        hasTitleObserver: Boolean(titleObserver),
+      });
+
+      observeCurrentChat();
+      watchTitleUnreadCount();
+      watchChatListUnreadBadges();
+      detectUnreadChanges('watchdog');
+    }, WATCHDOG_INTERVAL_MS);
+
+    waLog('content', 'watchdog started', { intervalMs: WATCHDOG_INTERVAL_MS });
+  }
+
   function watchTitleUnreadCount() {
     if (titleObserver) return;
 
@@ -114,24 +144,62 @@
     if (!titleElement) return;
 
     titleObserver = new MutationObserver(() => {
-      const unreadCount = getUnreadCountFromTitle();
-
-      if (unreadCount > lastUnreadCount) {
-        waLog('content', 'unread title count increased', {
-          previous: lastUnreadCount,
-          current: unreadCount,
-          title: document.title,
-        });
-        playConfiguredAudio();
-      }
-
-      lastUnreadCount = unreadCount;
+      detectUnreadChanges('title');
     });
 
     titleObserver.observe(titleElement, {
       childList: true,
     });
     waLog('content', 'watching title unread count', { title: document.title });
+  }
+
+  function watchChatListUnreadBadges() {
+    if (chatListObserver) return;
+
+    const chatList = document.querySelector(CHAT_LIST_SELECTOR);
+    if (!chatList) {
+      waLog('content', 'chat list not found yet');
+      return;
+    }
+
+    lastChatListUnreadTotal = getChatListUnreadTotal();
+
+    chatListObserver = new MutationObserver(() => {
+      detectUnreadChanges('chat-list');
+    });
+
+    chatListObserver.observe(chatList, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['aria-label'],
+    });
+
+    waLog('content', 'watching chat list unread badges', {
+      unreadTotal: lastChatListUnreadTotal,
+    });
+  }
+
+  function detectUnreadChanges(source) {
+    const unreadCount = getUnreadCountFromTitle();
+    const chatListUnreadTotal = getChatListUnreadTotal();
+    const titleIncreased = unreadCount > lastUnreadCount;
+    const chatListIncreased = chatListUnreadTotal > lastChatListUnreadTotal;
+
+    if (titleIncreased || chatListIncreased) {
+      waLog('content', 'unread count increased', {
+        source,
+        previousTitle: lastUnreadCount,
+        currentTitle: unreadCount,
+        previousChatList: lastChatListUnreadTotal,
+        currentChatList: chatListUnreadTotal,
+      });
+      playConfiguredAudio();
+    }
+
+    lastUnreadCount = unreadCount;
+    lastChatListUnreadTotal = chatListUnreadTotal;
   }
 
   function observeCurrentChat() {
@@ -317,6 +385,26 @@
 
     const count = Number(match[1]);
     return Number.isFinite(count) ? count : 0;
+  }
+
+  function getChatListUnreadTotal() {
+    const chatList = document.querySelector(CHAT_LIST_SELECTOR);
+    if (!chatList) return 0;
+
+    let total = 0;
+    for (const badge of chatList.querySelectorAll(UNREAD_BADGE_SELECTOR)) {
+      total += getUnreadCountFromText(badge.getAttribute('aria-label') || badge.textContent || '');
+    }
+
+    return total;
+  }
+
+  function getUnreadCountFromText(text) {
+    const match = String(text).match(/\d+/);
+    if (!match) return 1;
+
+    const count = Number(match[0]);
+    return Number.isFinite(count) ? count : 1;
   }
 
   if (document.readyState === 'loading') {
